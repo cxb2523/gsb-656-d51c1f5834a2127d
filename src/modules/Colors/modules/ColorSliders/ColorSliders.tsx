@@ -1,0 +1,120 @@
+import { Color } from "~/core/Color";
+import { state } from "~/core/State";
+import { Input, Range } from "~/ui/Button";
+import { useSignals } from "@preact/signals-react/runtime";
+import { useEffect, useState, type FC } from "react";
+import styled from "styled-components";
+
+const Root = styled.div<{ $compact: boolean }>`
+  position: ${({ $compact }) => $compact ? 'relative' : 'absolute'};
+  inset: ${({ $compact }) => $compact ? 'auto' : '0'};
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg2);
+  border: 1px solid var(--b1);
+`;
+
+const Row = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+`;
+
+const Name = styled.span`
+  width: 1.2em;
+  color: var(--fg-dim);
+`;
+
+const Track = styled(Range)`
+  appearance: none;
+  flex-grow: 1;
+  height: 12px;
+  border: 1px solid var(--b1);
+  cursor: pointer;
+
+  &::-webkit-slider-runnable-track { height: 100%; background: transparent; border: none; box-shadow: none; }
+  &::-moz-range-track { height: 100%; background: transparent; border: none; }
+
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 6px;
+    height: 14px;
+    background: #fff;
+    border: 1px solid #000;
+  }
+`;
+
+const Num = styled(Input)`
+  width: 3.4em;
+`;
+
+const checker = 'repeating-conic-gradient(var(--checker-a) 0 25%, var(--checker-b) 0 50%) 0 0 / 8px 8px';
+
+/** RGB / HSV / alpha sliders and a hex field; tracks show the gradient for the current color */
+export const ColorSliders: FC<{ alt: boolean; compact?: boolean; }> = ({ alt, compact = false }) => {
+  useSignals();
+  const color = alt ? state.colorB : state.colorA;
+  const set = (c: Color) => { if (alt) state.colorB = c; else state.colorA = c; };
+  const [r, g, b, a] = color.rgba;
+  const [h, s, v] = color.hsv;
+  const [hex, setHex] = useState(color.toHexString());
+  const [typing, setTyping] = useState(false);
+  // The hex field follows the color unless it is being typed into
+  useEffect(() => { if (!typing) setHex(color.toHexString()); }, [color, typing]);
+  const validHex = /^#?(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(hex.trim());
+
+  const rgbTrack = (k: 0 | 1 | 2) => {
+    const lo = [r, g, b], hi = [r, g, b];
+    lo[k] = 0; hi[k] = 255;
+    return `linear-gradient(to right, rgb(${lo}), rgb(${hi}))`;
+  };
+  const hsvColor = (hh: number, ss: number, vv: number) => Color.fromHsv(hh, ss, vv).toHexString(false);
+  const rows: [string, number, number, string, (n: number) => void][] = [
+    ['R', r, 255, rgbTrack(0), n => set(Color.fromRgb(n, g, b, a))],
+    ['G', g, 255, rgbTrack(1), n => set(Color.fromRgb(r, n, b, a))],
+    ['B', b, 255, rgbTrack(2), n => set(Color.fromRgb(r, g, n, a))],
+    ['H', Math.round(h), 360, `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map(d => hsvColor(d, s || 1, v || 1)).join(',')})`, n => set(Color.fromHsv(n, s, v, a))],
+    ['S', Math.round(s * 100), 100, `linear-gradient(to right, ${hsvColor(h, 0, v)}, ${hsvColor(h, 1, v)})`, n => set(Color.fromHsv(h, n / 100, v, a))],
+    ['V', Math.round(v * 100), 100, `linear-gradient(to right, #000, ${hsvColor(h, s, 1)})`, n => set(Color.fromHsv(h, s, n / 100, a))],
+    ['A', Math.round(a * 255), 255, `linear-gradient(to right, transparent, rgb(${r},${g},${b})), ${checker}`, n => set(Color.fromRgb(r, g, b, n / 255))],
+  ];
+
+  return (
+    <Root $compact={compact}>
+      {rows.filter(([name]) => !compact || ['R', 'G', 'B', 'A'].includes(name)).map(([name, value, max, track, onChange]) => (
+        <Row key={name}>
+          <Name>{name}</Name>
+          <Track aria-label={name} min={0} max={max} value={value} style={{ background: track }} onChange={e => onChange(+e.target.value)} />
+          <Num aria-label={name} type="number" min={0} max={max} value={value} onChange={e => onChange(Math.max(0, Math.min(max, +e.target.value || 0)))} />
+        </Row>
+      ))}
+      <Row>
+        <Name>#</Name>
+        <Input
+          aria-label="HEX"
+          aria-invalid={!validHex}
+          title="HEX: #RGB, #RGBA, #RRGGBB, #RRGGBBAA"
+          spellCheck={false}
+          value={hex}
+          style={{ flexGrow: 1, minWidth: 0 }}
+          onFocus={() => setTyping(true)}
+          onBlur={() => setTyping(false)}
+          onKeyDown={e => e.stopPropagation()}
+          onChange={e => {
+            const value = e.target.value;
+            setHex(value);
+            const match = /^#?([\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.exec(value.trim());
+            if (match) {
+              const next = Color.fromHex(match[1]);
+              // RGB input preserves alpha; RGBA input explicitly changes it.
+              if (match[1].length === 3 || match[1].length === 6) next.rgba = [...next.rgb, a];
+              set(next);
+            }
+          }} />
+      </Row>
+    </Root>
+  );
+};

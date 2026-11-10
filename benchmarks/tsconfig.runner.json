@@ -1,0 +1,18 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [
+      "bun"
+    ],
+    "tsBuildInfoFile": "../node_modules/.tmp/benchmarks-runner.tsbuildinfo"
+  },
+  "include": [
+    "runner.ts",
+    "interaction-check.ts",
+    "native-interaction-check.ts",
+    "scenarios.ts",
+    "compare.ts",
+    "virtualization-check.ts",
+    "history-check.ts"
+  ]
+}

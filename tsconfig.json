@@ -1,0 +1,19 @@
+{
+  "//": "Each part has its own tsconfig.json (shared options in tsconfig.base.json); tsc -b checks them all",
+  "files": [],
+  "references": [
+    { "path": "./src" },
+    { "path": "./src/tsconfig.test.json" },
+    { "path": "./packages/api" },
+    { "path": "./packages/ui" },
+    { "path": "./packages/ui-react" },
+    { "path": "./scripts" },
+    { "path": "./e2e" },
+    { "path": "./desktop" },
+    { "path": "./benchmarks" },
+    { "path": "./benchmarks/tsconfig.runner.json" },
+    { "path": "./extensions/ai-assistant" },
+    { "path": "./extensions/game-rig" },
+    { "path": "./extensions/template" }
+  ]
+}

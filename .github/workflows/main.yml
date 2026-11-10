@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request: {}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Tauri version compatibility
+        run: bun run desktop:check
+
+      - name: Unit tests
+        run: bun run test
+
+      - name: Format round-trip tests
+        run: bun run test:formats
+
+      - name: Format migration tests
+        run: bun run test:migrations
+
+      - name: Translations
+        run: bun run i18n:check
+
+      - name: Extensions
+        run: bun run ext:check
+
+      - name: Build
+        run: bun run build
+
+      - name: Bundle budgets
+        run: bun run bundle:check
+
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Browser smoke tests
+        run: bun run test:e2e:smoke
+        env:
+          PIXPRITE_E2E_PREBUILT: '1'
+
+      - name: Browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failures
+          path: |
+            dist/reports/playwright/
+            dist/reports/e2e/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Deployment artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-dist
+          path: dist/web/
+          retention-days: 1
+
+  deploy:
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: editor-dist
+          path: dist/web
+      - name: Deploy
+        uses: crazy-max/ghaction-github-pages@v4
+        with:
+          target_branch: gh-pages
+          build_dir: dist/web
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

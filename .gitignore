@@ -1,0 +1,33 @@
+# Dependencies and generated output
+node_modules/
+/dist/
+*.tsbuildinfo
+/.swc/
+/public/extensions/
+
+# Local configuration and logs
+*.local
+.env
+.env.*
+!.env.example
+logs/
+*.log
+
+# Editors and operating systems
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Tauri generated schemas and Rust fallback output
+/src-tauri/gen/
+/src-tauri/target/
+
+# Read-only clones and other temporary research files
+/.tmp/

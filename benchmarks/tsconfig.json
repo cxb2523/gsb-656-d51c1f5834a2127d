@@ -1,0 +1,40 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../node_modules/.tmp/benchmarks.tsbuildinfo",
+    "jsx": "react-jsx",
+    "experimentalDecorators": true,
+    "types": [
+      "vite/client",
+      "vite-plugin-glsl/ext"
+    ],
+    "paths": {
+      "~/*": [
+        "../src/*"
+      ],
+      "@pixprite/api": [
+        "../packages/api/src/index.ts"
+      ],
+      "@pixprite/api/*": [
+        "../packages/api/src/*"
+      ],
+      "@pixprite/ui": [
+        "../packages/ui/src/index.ts"
+      ],
+      "@pixprite/ui/*": [
+        "../packages/ui/src/*"
+      ]
+    }
+  },
+  "include": [
+    "*.ts"
+  ],
+  "exclude": [
+    "runner.ts", "interaction-check.ts", "native-interaction-check.ts",
+    "vite.config.ts",
+    "vite.security.config.ts",
+    "compare.ts",
+    "virtualization-check.ts",
+    "history-check.ts"
+  ]
+}
