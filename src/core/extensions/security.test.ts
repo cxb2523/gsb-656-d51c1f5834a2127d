@@ -3,6 +3,7 @@ import { API_VERSION } from '@pixprite/api';
 import { parseManifest, validateManifest } from './manifest';
 import { resolvePath, safePath } from './paths';
 import { METHODS, missingPermission, PERMISSION_FOR_METHOD } from './protocol';
+import { isNetworkAllowed, parseNetworkPermission, parseNetworkUrl } from './network';
 
 const manifest = () => ({ id: 'security-test', name: 'Security', version: '1.0.0', apiVersion: API_VERSION });
 
@@ -21,6 +22,45 @@ describe('extension capability boundary', () => {
     for (const url of ['https://allowed.test/', 'https://allowed.test:443/a', 'http://localhost:4173']) expect(missingPermission('net.fetch', permissions, url)).toBeNull();
     for (const url of ['https://allowed.test.evil.test', 'https://allowed.test@evil.test', 'https://allowed.test:444', 'http://localhost:4174', 'invalid']) expect(missingPermission('net.fetch', permissions, url)).not.toBeNull();
     expect(missingPermission('net.fetch', ['network:*'], 'https://other.test')).toBeNull();
+  });
+});
+
+describe('network permission port normalization and string parsing', () => {
+  test('an explicit scheme-default port in the permission matches a URL that omits the port', () => {
+    expect(isNetworkAllowed(['network:allowed.test:443'], 'https://allowed.test/')).toBe(true);
+    expect(isNetworkAllowed(['network:allowed.test:443'], 'https://allowed.test:443/path')).toBe(true);
+    expect(isNetworkAllowed(['network:allowed.test:80'], 'http://allowed.test/')).toBe(true);
+    // Default ports are per scheme: 443 in the permission does not cover an http (port 80) URL.
+    expect(isNetworkAllowed(['network:allowed.test:443'], 'http://allowed.test/')).toBe(false);
+    expect(isNetworkAllowed(['network:allowed.test:80'], 'https://allowed.test/')).toBe(false);
+    expect(missingPermission('net.fetch', ['network:allowed.test:443'], 'https://allowed.test/')).toBeNull();
+  });
+  test('a non-default port in the permission never matches a URL that falls back to the default port', () => {
+    expect(isNetworkAllowed(['network:api.test:8080'], 'http://api.test/')).toBe(false);
+    expect(isNetworkAllowed(['network:api.test:8080'], 'https://api.test/')).toBe(false);
+    // It still matches when the URL names that exact port.
+    expect(isNetworkAllowed(['network:api.test:8080'], 'http://api.test:8080/')).toBe(true);
+    // And a port-less permission (default origin) does not cover a URL on a non-default port.
+    expect(isNetworkAllowed(['network:api.test'], 'https://api.test:8080/')).toBe(false);
+    expect(missingPermission('net.fetch', ['network:api.test:8080'], 'https://api.test/')).not.toBeNull();
+  });
+  test('illegal permission strings parse to null and never grant access', () => {
+    for (const permission of ['network:', 'network::443', 'network:host::443', 'network:host:443:80', 'network::', 'network: :443', 'network:host:0', 'network:host:99999', 'network:host:abc', 'storage', '']) {
+      expect(parseNetworkPermission(permission), permission).toBeNull();
+      expect(isNetworkAllowed([permission], 'https://host/'), permission).toBe(false);
+    }
+    // A malformed entry must not shadow a valid sibling permission.
+    expect(isNetworkAllowed(['network:', 'network:allowed.test'], 'https://allowed.test/')).toBe(true);
+    expect(parseNetworkPermission('network:ALLOWED.TEST:443')).toEqual({ host: 'allowed.test', port: 443 });
+    expect(parseNetworkPermission('network:*')).toEqual({ host: '*', port: null });
+  });
+  test('URL parsing normalizes default ports and rejects credentials and non-http(s) schemes', () => {
+    expect(parseNetworkUrl('https://allowed.test/')).toEqual({ host: 'allowed.test', port: 443, defaultPort: 443 });
+    expect(parseNetworkUrl('http://allowed.test:80/')).toEqual({ host: 'allowed.test', port: 80, defaultPort: 80 });
+    expect(parseNetworkUrl('https://allowed.test:443/')?.port).toBe(443);
+    expect(parseNetworkUrl('https://user:pass@allowed.test/')).toBeNull();
+    expect(parseNetworkUrl('ftp://allowed.test/')).toBeNull();
+    expect(parseNetworkUrl('not a url')).toBeNull();
   });
 });
 

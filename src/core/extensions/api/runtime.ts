@@ -26,6 +26,7 @@ function corePermissions(id: string): string[] {
   return ['sprite:write'];
 }
 import { fail, hosts, isObject, type Call, type Handlers } from "./common";
+import { describeNetworkTarget, isNetworkAllowed, parseNetworkUrl } from "../network";
 
 type Kind = 'command' | 'tool' | 'filter' | 'importer' | 'exporter' | 'validator';
 
@@ -172,8 +173,15 @@ export const runtimeHandlers: Handlers = {
   },
 
   'net.fetch': async (c, url, init) => {
-    const u = new URL(String(url));
-    if (u.protocol !== 'https:' && !(u.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(u.hostname))) fail('permission', 'Only https urls can be fetched');
+    const raw = String(url);
+    // The pure gate parses the URL, refuses credentials/non-http(s), and matches the allowlist.
+    const target = parseNetworkUrl(raw);
+    if (!target) return fail('permission', 'Only http(s) urls without credentials can be fetched');
+    const u = new URL(raw);
+    if (u.protocol === 'http:' && target.host !== 'localhost' && target.host !== '127.0.0.1')
+      return fail('permission', 'Only https urls can be fetched');
+    if (!isNetworkAllowed(c.host.permissions, raw))
+      return fail('permission', `Permission "${describeNetworkTarget(target)}" is not granted`);
     const o = isObject(init) ? init : {};
     const headers = isObject(o.headers) ? Object.fromEntries(Object.entries(o.headers).map(([k, v]) => [k, String(v)])) : undefined;
     const body = typeof o.body === 'string' || o.body instanceof ArrayBuffer ? o.body : undefined;

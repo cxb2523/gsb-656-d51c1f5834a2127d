@@ -50,6 +50,37 @@ test('@smoke security: allowlist gates host fetch, credentials, protocols, redir
   expect(forbidden.filter(url => url.includes('evil.test'))).toEqual([]);
 });
 
+test('@smoke security: loopback http is allowed on the granted port while https over that port is rejected', async ({ page }) => {
+  // Listen for the attempted https request failing at the browser before any TLS bytes reach the server.
+  const failed: string[] = [];
+  page.on('requestfailed', request => { if (request.url().startsWith('https://127.0.0.1:4173/')) failed.push(request.url()); });
+  await page.context().addCookies([{ name: 'editor-secret', value: 'private', url: 'http://127.0.0.1:4173' }]);
+  const requests: Record<string, string>[] = [];
+  await page.route('**/__security__/allowed', async route => { requests.push(route.request().headers()); await route.continue(); });
+  await api(page, 'install', extension(`return {async probe() {
+    const results = {};
+    for (const [key,url] of Object.entries({
+      httpAllowed:'http://127.0.0.1:4173/__security__/allowed',
+      httpsDenied:'https://127.0.0.1:4173/__security__/forbidden',
+    })) {
+      try { results[key] = (await ctx.net.fetch(url)).status; } catch(e) { results[key] = e.code; }
+    }
+    return results;
+  }};`), ['network:127.0.0.1:4173']);
+  await api(page, 'ready');
+  // Same host and port, but the permission names an http origin: plain http succeeds, while https
+  // over the http-only test server cannot complete the protocol/port combination and is rejected.
+  const result = await api(page, 'invoke', 'probe');
+  expect(result.httpAllowed).toBe(200);
+  expect(typeof result.httpsDenied).toBe('string');
+  expect(result.httpsDenied).not.toBe(200);
+  expect(failed.map(url => url.replace(/https?:\/\//, ''))).toContain('127.0.0.1:4173/__security__/forbidden');
+  // Only the allowed http request reached the server, without cookies or a referer.
+  expect(requests).toHaveLength(1);
+  expect(requests[0].cookie).toBeUndefined(); expect(requests[0].referer).toBeUndefined();
+  expect(await (await page.request.get('/__security__/network-log')).json()).toEqual([]);
+});
+
 test('@smoke security: opaque worker has no editor DOM or IndexedDB and cannot bypass RPC via dynamic import', async ({ page }) => {
   await page.evaluate(async () => {
     const r = indexedDB.open('editor-secret'); await new Promise<void>(resolve => r.onsuccess = () => { r.result.close(); resolve(); });

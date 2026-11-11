@@ -3,6 +3,7 @@
  * Wire message shapes live in `@pixprite/api` (wire.ts) so both ends share them.
  */
 import type { Permission } from "@pixprite/api";
+import { describeNetworkTarget, isNetworkAllowed, parseNetworkUrl } from "./network";
 
 export type {
   ActivatedMessage, CallbackKind, ErrorCode, ErrorInfo, EventMessage, FailedMessage, I18nChange, InitMessage,
@@ -148,9 +149,9 @@ export function missingPermission(method: string, permissions: readonly string[]
   const need = PERMISSION_FOR_METHOD[method];
   if (need === null) return null;
   if (need === 'network') {
-    let host = '';
-    try { host = new URL(url ?? '').host; } catch { return 'network:<invalid url>'; }
-    return permissions.includes(`network:${host}`) || permissions.includes('network:*') ? null : `network:${host}`;
+    const target = url === undefined ? null : parseNetworkUrl(url);
+    if (!target) return 'network:<invalid url>';
+    return isNetworkAllowed(permissions, url) ? null : describeNetworkTarget(target);
   }
   return permissions.includes(need) ? null : need;
 }
